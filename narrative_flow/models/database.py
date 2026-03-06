@@ -238,3 +238,51 @@ class VelocitySnapshot(Base):
     total_mentions = Column(Integer)
     unique_sources = Column(Integer)
     avg_influencer_weight = Column(Float)
+
+
+class DivergenceHistory(Base):
+    """Historical divergence signals for backtesting."""
+    __tablename__ = "divergence_history"
+    __table_args__ = (
+        Index("idx_divergence_timestamp", "timestamp"),
+        Index("idx_divergence_narrative", "narrative"),
+        Index("idx_divergence_signal", "divergence_signal"),
+        Index("idx_divergence_confidence", "confidence"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+    narrative = Column(String(50), nullable=False)
+
+    # Social metrics at signal time
+    social_velocity = Column(Float)
+    sentiment_strength = Column(Float)
+    social_buzz_trend = Column(Float)
+
+    # On-chain metrics at signal time
+    onchain_activity = Column(Float)
+    onchain_delta = Column(Float)
+    tvl = Column(Float)
+    tvl_change_24h = Column(Float)
+
+    # Market metrics at signal time
+    price = Column(Float)
+    price_change_24h = Column(Float)
+    volume_24h = Column(Float)
+    market_cap = Column(Float)
+
+    # Computed scores
+    momentum_score = Column(Float)
+    price_momentum = Column(Float)
+    divergence_score = Column(Float)
+
+    # Classifications
+    divergence_signal = Column(String(20))  # early_entry, late_exit, accumulation, dead, neutral
+    lifecycle_stage = Column(String(20))  # whisper, emerging, mainstream, peak, declining, dead
+    confidence = Column(Float)  # 0-1 confidence score
+
+    # Outcome tracking (for backtesting)
+    price_after_24h = Column(Float)  # Price 24h after signal
+    price_after_7d = Column(Float)  # Price 7d after signal
+    signal_success = Column(Boolean)  # Whether the signal was profitable
+    return_pct = Column(Float)  # Actual return if acted on signal

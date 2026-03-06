@@ -6,6 +6,8 @@ from narrative_flow.engine.sentiment import SentimentAnalyzer, SentimentLabel
 from narrative_flow.engine.velocity import VelocityCalculator, MomentumTracker, InfluencerWeighting, MentionEvent
 from narrative_flow.engine.novelty import NoveltyScorer
 from narrative_flow.engine.processor import NarrativeProcessor
+from narrative_flow.engine.divergence import DivergenceDetector, DivergenceSignal, LifecycleStage, NarrativeMomentum
+from narrative_flow.engine.tracker import DivergenceTracker
 
 __all__ = [
     'NarrativeClassifier',
@@ -19,5 +21,10 @@ __all__ = [
     'InfluencerWeighting',
     'MentionEvent',
     'NoveltyScorer',
-    'NarrativeProcessor'
+    'NarrativeProcessor',
+    'DivergenceDetector',
+    'DivergenceSignal',
+    'LifecycleStage',
+    'NarrativeMomentum',
+    'DivergenceTracker'
 ]

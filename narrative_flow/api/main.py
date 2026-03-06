@@ -1,6 +1,6 @@
 """FastAPI application for NarrativeFlow."""
 
-from fastapi import FastAPI, Depends, Query, HTTPException
+from fastapi import FastAPI, Depends, Query, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
@@ -9,9 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, desc
 import logging
 
-from ..models import get_db, RawData, MarketData, OnChainData, NarrativeMetrics, DataSource, EnrichedData, VelocitySnapshot
+from ..models import get_db, RawData, MarketData, OnChainData, NarrativeMetrics, DataSource, EnrichedData, VelocitySnapshot, DivergenceHistory
 from ..config import settings
-from ..engine import NarrativeProcessor
+from ..engine import NarrativeProcessor, DivergenceDetector, DivergenceTracker, DivergenceSignal
+from .websocket import websocket_endpoint, start_monitor, stop_monitor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -590,3 +591,325 @@ async def search_data(
         }
         for item in items
     ]
+
+
+# ============= Phase 3: Divergence Detection Endpoints =============
+
+@app.get("/divergences")
+async def get_divergences(
+    signal_type: Optional[str] = Query(None, description="Filter by signal type (early_entry, late_exit, accumulation, dead)"),
+    min_confidence: float = Query(0.6, description="Minimum confidence score (0-1)"),
+    hours: int = Query(24, description="Hours to look back"),
+    db: AsyncSession = Depends(get_db)
+) -> Dict[str, Any]:
+    """Get current divergence signals across all narratives."""
+    detector = DivergenceDetector(db)
+    tracker = DivergenceTracker(db)
+
+    # Get recent historical signals
+    recent_signals = await tracker.get_recent_signals(
+        hours=hours,
+        signal_type=signal_type,
+        min_confidence=min_confidence
+    )
+
+    # Scan for current signals
+    try:
+        signal_enum = DivergenceSignal[signal_type.upper()] if signal_type else None
+    except:
+        signal_enum = None
+
+    current_signals = await detector.get_top_divergences(
+        signal_type=signal_enum,
+        min_confidence=min_confidence,
+        limit=20
+    )
+
+    # Format current signals
+    formatted_current = []
+    for signal in current_signals:
+        formatted_current.append({
+            "narrative": signal.narrative,
+            "signal": signal.divergence_signal.value,
+            "lifecycle": signal.lifecycle_stage.value,
+            "confidence": signal.confidence,
+            "momentum_score": signal.momentum_score,
+            "price_momentum": signal.price_momentum,
+            "divergence_score": signal.divergence_score,
+            "social_velocity": signal.social_velocity,
+            "sentiment": signal.sentiment_strength,
+            "tvl": signal.tvl,
+            "price": signal.price,
+            "price_change_24h": signal.price_change_24h,
+            "timestamp": signal.timestamp.isoformat()
+        })
+
+    # Record new signals to history
+    if current_signals:
+        await tracker.record_multiple(current_signals)
+
+    return {
+        "current_signals": formatted_current,
+        "recent_signals": recent_signals,
+        "filters": {
+            "signal_type": signal_type,
+            "min_confidence": min_confidence,
+            "hours": hours
+        },
+        "top_opportunities": [
+            s for s in formatted_current
+            if s["signal"] in ["early_entry", "accumulation"]
+        ][:5]
+    }
+
+
+@app.get("/narratives/lifecycle")
+async def get_narrative_lifecycle(
+    db: AsyncSession = Depends(get_db)
+) -> Dict[str, Any]:
+    """Get lifecycle stage for all narratives."""
+    detector = DivergenceDetector(db)
+
+    # Analyze all narratives
+    all_narratives = await detector.scan_all_narratives(
+        settings.narrative_categories,
+        lookback_hours=24
+    )
+
+    # Group by lifecycle stage
+    lifecycle_groups = {
+        "whisper": [],
+        "emerging": [],
+        "mainstream": [],
+        "peak": [],
+        "declining": [],
+        "dead": []
+    }
+
+    for momentum in all_narratives:
+        stage = momentum.lifecycle_stage.value
+        if stage in lifecycle_groups:
+            lifecycle_groups[stage].append({
+                "narrative": momentum.narrative,
+                "momentum_score": momentum.momentum_score,
+                "sentiment": momentum.sentiment_strength,
+                "social_velocity": momentum.social_velocity,
+                "tvl": momentum.tvl,
+                "price_change_24h": momentum.price_change_24h
+            })
+
+    # Sort each group by momentum
+    for stage in lifecycle_groups:
+        lifecycle_groups[stage].sort(
+            key=lambda x: x["momentum_score"],
+            reverse=True
+        )
+
+    return {
+        "timestamp": datetime.utcnow().isoformat(),
+        "lifecycle_stages": lifecycle_groups,
+        "summary": {
+            stage: len(narratives)
+            for stage, narratives in lifecycle_groups.items()
+        },
+        "rotation_opportunities": {
+            "emerging_to_mainstream": lifecycle_groups["emerging"][:3],
+            "mainstream_to_peak": lifecycle_groups["mainstream"][:3],
+            "peak_to_declining": lifecycle_groups["peak"][:3]
+        }
+    }
+
+
+@app.get("/narratives/momentum")
+async def get_narrative_momentum(
+    narrative: Optional[str] = Query(None, description="Specific narrative to analyze"),
+    top_n: int = Query(10, description="Number of top narratives to return"),
+    db: AsyncSession = Depends(get_db)
+) -> Dict[str, Any]:
+    """Get narrative momentum scores with detailed metrics."""
+    detector = DivergenceDetector(db)
+
+    if narrative:
+        # Analyze specific narrative
+        momentum = await detector.analyze_narrative(narrative, lookback_hours=24)
+
+        if not momentum:
+            raise HTTPException(404, f"No data available for narrative: {narrative}")
+
+        return {
+            "narrative": momentum.narrative,
+            "timestamp": momentum.timestamp.isoformat(),
+            "momentum_score": momentum.momentum_score,
+            "price_momentum": momentum.price_momentum,
+            "divergence_score": momentum.divergence_score,
+            "signal": momentum.divergence_signal.value,
+            "lifecycle": momentum.lifecycle_stage.value,
+            "confidence": momentum.confidence,
+            "metrics": {
+                "social": {
+                    "velocity": momentum.social_velocity,
+                    "sentiment": momentum.sentiment_strength,
+                    "trend": momentum.social_buzz_trend
+                },
+                "onchain": {
+                    "activity": momentum.onchain_activity,
+                    "delta": momentum.onchain_delta,
+                    "tvl": momentum.tvl,
+                    "tvl_change": momentum.tvl_change_24h
+                },
+                "market": {
+                    "price": momentum.price,
+                    "price_change_24h": momentum.price_change_24h,
+                    "volume_24h": momentum.volume_24h,
+                    "market_cap": momentum.market_cap
+                }
+            }
+        }
+    else:
+        # Get top narratives by momentum
+        all_narratives = await detector.scan_all_narratives(
+            settings.narrative_categories,
+            lookback_hours=24
+        )
+
+        # Sort by momentum score
+        all_narratives.sort(key=lambda x: x.momentum_score, reverse=True)
+        top_narratives = all_narratives[:top_n]
+
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "top_narratives": [
+                {
+                    "rank": i + 1,
+                    "narrative": n.narrative,
+                    "momentum_score": n.momentum_score,
+                    "price_momentum": n.price_momentum,
+                    "divergence_score": n.divergence_score,
+                    "signal": n.divergence_signal.value,
+                    "lifecycle": n.lifecycle_stage.value,
+                    "confidence": n.confidence,
+                    "social_velocity": n.social_velocity,
+                    "sentiment": n.sentiment_strength,
+                    "tvl": n.tvl,
+                    "price_change_24h": n.price_change_24h
+                }
+                for i, n in enumerate(top_narratives)
+            ],
+            "momentum_leaders": [n.narrative for n in top_narratives[:3]],
+            "divergence_opportunities": [
+                n.narrative for n in top_narratives
+                if n.divergence_signal in [DivergenceSignal.EARLY_ENTRY, DivergenceSignal.ACCUMULATION]
+            ][:3]
+        }
+
+
+@app.get("/divergences/history")
+async def get_divergence_history(
+    narrative: Optional[str] = Query(None, description="Filter by narrative"),
+    signal_type: Optional[str] = Query(None, description="Filter by signal type"),
+    days: int = Query(7, description="Days to look back"),
+    db: AsyncSession = Depends(get_db)
+) -> List[Dict[str, Any]]:
+    """Get historical divergence signals."""
+    since = datetime.utcnow() - timedelta(days=days)
+
+    query = select(DivergenceHistory).where(
+        DivergenceHistory.timestamp >= since
+    )
+
+    if narrative:
+        query = query.where(DivergenceHistory.narrative == narrative)
+    if signal_type:
+        query = query.where(DivergenceHistory.divergence_signal == signal_type)
+
+    query = query.order_by(desc(DivergenceHistory.timestamp))
+
+    result = await db.execute(query)
+    signals = result.scalars().all()
+
+    return [
+        {
+            "id": signal.id,
+            "timestamp": signal.timestamp.isoformat(),
+            "narrative": signal.narrative,
+            "signal": signal.divergence_signal,
+            "lifecycle": signal.lifecycle_stage,
+            "confidence": signal.confidence,
+            "momentum_score": signal.momentum_score,
+            "price_momentum": signal.price_momentum,
+            "divergence_score": signal.divergence_score,
+            "price": signal.price,
+            "price_change_24h": signal.price_change_24h,
+            "outcome": {
+                "price_after_24h": signal.price_after_24h,
+                "price_after_7d": signal.price_after_7d,
+                "success": signal.signal_success,
+                "return_pct": signal.return_pct
+            } if signal.price_after_24h else None
+        }
+        for signal in signals
+    ]
+
+
+@app.get("/divergences/performance")
+async def get_divergence_performance(
+    signal_type: Optional[str] = Query(None, description="Filter by signal type"),
+    days: int = Query(30, description="Days to analyze"),
+    db: AsyncSession = Depends(get_db)
+) -> Dict[str, Any]:
+    """Get performance metrics for divergence signals."""
+    tracker = DivergenceTracker(db)
+
+    # Update outcomes first
+    await tracker.update_outcomes(lookback_days=days)
+
+    # Get performance metrics
+    performance = await tracker.get_signal_performance(
+        signal_type=signal_type,
+        days_back=days
+    )
+
+    return performance
+
+
+# ============= WebSocket Endpoint =============
+
+@app.websocket("/ws/divergences")
+async def divergence_websocket(websocket: WebSocket):
+    """WebSocket endpoint for real-time divergence alerts.
+
+    Client can send messages to configure subscriptions:
+    {
+        "type": "subscribe",
+        "preferences": {
+            "signal_types": ["early_entry", "accumulation"],
+            "min_confidence": 0.7,
+            "narratives": ["AI", "RWA", "DePIN"],
+            "message_types": ["divergence_alert", "lifecycle_change"]
+        }
+    }
+
+    Other message types:
+    - {"type": "ping"} - Keep alive ping
+    - {"type": "request_current"} - Get current top signals
+    """
+    await websocket_endpoint(websocket)
+
+
+# ============= Startup/Shutdown Events =============
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize background tasks on startup."""
+    logger.info("Starting NarrativeFlow API...")
+    # Start the divergence monitor for WebSocket alerts
+    # Note: In production, you'd pass the actual DB session factory
+    # start_monitor(get_db)
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Clean up on shutdown."""
+    logger.info("Shutting down NarrativeFlow API...")
+    # Stop the divergence monitor
+    # stop_monitor()
