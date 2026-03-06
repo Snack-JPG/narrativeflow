@@ -50,7 +50,7 @@ class RawData(Base):
     sentiment_score = Column(Float)  # -1 to 1
 
     # Source-specific data
-    metadata = Column(JSON)  # Flexible field for source-specific data
+    source_metadata = Column(JSON)  # Flexible field for source-specific data
 
     # Relationships
     source = relationship("DataSource", back_populates="raw_data")
@@ -83,7 +83,7 @@ class MarketData(Base):
 
     # Source
     source = Column(String(50))  # binance, coingecko, etc.
-    metadata = Column(JSON)
+    source_metadata = Column(JSON)
 
 
 class OnChainData(Base):
@@ -114,7 +114,7 @@ class OnChainData(Base):
 
     # Source
     source = Column(String(50))  # defi_llama, dune, etc.
-    metadata = Column(JSON)
+    source_metadata = Column(JSON)
 
 
 class NarrativeMetrics(Base):
@@ -149,3 +149,92 @@ class NarrativeMetrics(Base):
     momentum_score = Column(Float)  # Calculated narrative momentum
     divergence_signal = Column(String(50))  # early, late, accumulation, dead
     lifecycle_stage = Column(String(50))  # whisper, emerging, mainstream, peak, declining, dead
+
+    # New Phase 2 metrics
+    weighted_velocity = Column(Float)  # Influencer-weighted velocity
+    acceleration = Column(Float)  # Velocity change percentage
+    novelty_score = Column(Float)  # Average novelty (0-1)
+    innovation_rate = Column(Float)  # % of novel content
+
+
+class EnrichedData(Base):
+    """Enriched data with narrative classification and sentiment."""
+    __tablename__ = "enriched_data"
+    __table_args__ = (
+        Index("idx_enriched_timestamp", "timestamp"),
+        Index("idx_enriched_narrative", "primary_narrative"),
+        Index("idx_enriched_sentiment", "sentiment_label"),
+        Index("idx_enriched_novelty", "novelty_score"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    raw_data_id = Column(Integer, ForeignKey("raw_data.id"), nullable=False)
+    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Classification
+    primary_narrative = Column(String(50))
+    all_narratives = Column(JSON)  # List of all applicable narratives
+    classification_confidence = Column(Float)
+    classification_method = Column(String(20))  # 'fast', 'ai', 'hybrid'
+
+    # Sentiment
+    sentiment_label = Column(String(20))  # bullish, bearish, neutral
+    sentiment_score = Column(Float)  # -1.0 to 1.0
+    sentiment_confidence = Column(Float)  # 0.0 to 1.0
+    sentiment_method = Column(String(20))  # 'cryptopanic', 'keywords', 'hybrid'
+
+    # Influence
+    influencer_weight = Column(Float, default=1.0)
+    source_reputation = Column(String(20))  # high, medium, low
+
+    # Novelty
+    novelty_score = Column(Float)  # 0.0 to 1.0
+    is_novel = Column(Boolean, default=False)
+    is_duplicate = Column(Boolean, default=False)
+    new_terms = Column(JSON)  # List of new/trending terms
+
+    # Tokens
+    extracted_tokens = Column(JSON)  # Crypto tokens mentioned
+
+    # Reddit specific
+    reddit_karma = Column(Integer)
+    reddit_account_age = Column(Integer)  # days
+    reddit_subreddit = Column(String(100))
+
+    # Twitter specific
+    twitter_followers = Column(Integer)
+    twitter_verified = Column(Boolean)
+    twitter_engagement = Column(Float)  # engagement rate
+
+    # Processing metadata
+    processed_at = Column(DateTime, default=datetime.utcnow)
+    processing_time_ms = Column(Integer)  # Time taken to process
+
+    # Relationships
+    raw_data = relationship("RawData", backref="enriched")
+
+
+class VelocitySnapshot(Base):
+    """Snapshot of narrative velocity metrics."""
+    __tablename__ = "velocity_snapshots"
+    __table_args__ = (
+        Index("idx_velocity_timestamp", "timestamp"),
+        Index("idx_velocity_narrative", "narrative_category"),
+        Index("idx_velocity_window", "time_window"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+    narrative_category = Column(String(50), nullable=False)
+    time_window = Column(String(10), nullable=False)  # 1h, 4h, 24h, 7d
+
+    # Velocity metrics
+    mentions_per_hour = Column(Float)
+    weighted_mentions_per_hour = Column(Float)
+    acceleration = Column(Float)  # % change in velocity
+    sentiment_weighted_velocity = Column(Float)
+
+    # Supporting metrics
+    total_mentions = Column(Integer)
+    unique_sources = Column(Integer)
+    avg_influencer_weight = Column(Float)

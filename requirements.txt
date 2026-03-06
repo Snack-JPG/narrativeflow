@@ -29,6 +29,9 @@ python-dateutil==2.9.0.post0
 pytz==2024.2
 tenacity==9.0.0  # Retry logic
 
+# AI/NLP for Phase 2
+anthropic==0.39.0  # Claude API for classification
+
 # Development
 pytest==8.3.4
 pytest-asyncio==0.25.0
