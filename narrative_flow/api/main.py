@@ -35,6 +35,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include routers
+app.include_router(briefing_router, prefix="/api")
+
 
 @app.get("/")
 async def root():
