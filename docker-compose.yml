@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  narrative-flow:
+    build: .
+    container_name: narrative-flow
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./narrative_flow/data:/app/narrative_flow/data
+      - ./logs:/app/logs
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./narrative_flow/data/narrative_flow.db
+
+      # Optional API keys (uncomment and add your keys)
+      # - CRYPTOPANIC_API_KEY=your_key_here
+      # - REDDIT_CLIENT_ID=your_client_id
+      # - REDDIT_CLIENT_SECRET=your_client_secret
+      # - COINGECKO_API_KEY=your_key_here
+
+      # Collection intervals (seconds)
+      - CRYPTOPANIC_INTERVAL=300
+      - REDDIT_INTERVAL=600
+      - RSS_INTERVAL=900
+      - DEFI_LLAMA_INTERVAL=1800
+      - COINGECKO_INTERVAL=600
+      - BINANCE_INTERVAL=60
+
+    networks:
+      - narrative-net
+
+networks:
+  narrative-net:
+    driver: bridge

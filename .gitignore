@@ -1,15 +1,65 @@
-node_modules/
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Environment variables
 .env
 .env.local
-venv/
-.venv/
-data/
+.env.*.local
+
+# Database
 *.db
-.DS_Store
-.next/
-dist/
-build/
-coverage/
+*.sqlite
+*.sqlite3
+narrative_flow/data/*.db
+
+# Logs
+logs/
+*.log
+
+# Testing
 .pytest_cache/
+.coverage
+htmlcov/
+
+# Docker
+docker-compose.override.yml
+
+# Project specific
+narrative_flow/data/*
+!narrative_flow/data/.gitkeep
+
+# Node (for future frontend)
+node_modules/
+.next/
