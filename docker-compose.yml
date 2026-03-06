@@ -1,35 +1,207 @@
 version: '3.8'
 
 services:
-  narrative-flow:
-    build: .
-    container_name: narrative-flow
-    restart: unless-stopped
+  # TimescaleDB for time-series data
+  timescaledb:
+    image: timescale/timescaledb:latest-pg15
+    container_name: narrativeflow-db
+    environment:
+      POSTGRES_DB: narrativeflow
+      POSTGRES_USER: narrativeflow
+      POSTGRES_PASSWORD: narrativeflow123
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+    networks:
+      - narrativeflow-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U narrativeflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching and pub/sub
+  redis:
+    image: redis:7-alpine
+    container_name: narrativeflow-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - narrativeflow-network
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI backend
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: narrativeflow-api
+    environment:
+      DATABASE_URL: postgresql://narrativeflow:narrativeflow123@timescaledb:5432/narrativeflow
+      REDIS_URL: redis://redis:6379
+      PYTHONUNBUFFERED: 1
+      # Add your API keys here or use .env file
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      COINGECKO_API_KEY: ${COINGECKO_API_KEY:-}
+      CRYPTOPANIC_API_KEY: ${CRYPTOPANIC_API_KEY:-}
+      REDDIT_CLIENT_ID: ${REDDIT_CLIENT_ID:-}
+      REDDIT_CLIENT_SECRET: ${REDDIT_CLIENT_SECRET:-}
     ports:
       - "8000:8000"
     volumes:
-      - ./narrative_flow/data:/app/narrative_flow/data
-      - ./logs:/app/logs
-    environment:
-      - DATABASE_URL=sqlite+aiosqlite:///./narrative_flow/data/narrative_flow.db
-
-      # Optional API keys (uncomment and add your keys)
-      # - CRYPTOPANIC_API_KEY=your_key_here
-      # - REDDIT_CLIENT_ID=your_client_id
-      # - REDDIT_CLIENT_SECRET=your_client_secret
-      # - COINGECKO_API_KEY=your_key_here
-
-      # Collection intervals (seconds)
-      - CRYPTOPANIC_INTERVAL=300
-      - REDDIT_INTERVAL=600
-      - RSS_INTERVAL=900
-      - DEFI_LLAMA_INTERVAL=1800
-      - COINGECKO_INTERVAL=600
-      - BINANCE_INTERVAL=60
-
+      - ./app:/app
+      - ./backtest:/backtest
+      - ./narrative_flow/data:/data
+      - ./logs:/logs
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
-      - narrative-net
+      - narrativeflow-network
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Data collector service
+  collector:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: narrativeflow-collector
+    environment:
+      DATABASE_URL: postgresql://narrativeflow:narrativeflow123@timescaledb:5432/narrativeflow
+      REDIS_URL: redis://redis:6379
+      PYTHONUNBUFFERED: 1
+      # Collection intervals (seconds)
+      CRYPTOPANIC_INTERVAL: 300
+      REDDIT_INTERVAL: 600
+      RSS_INTERVAL: 900
+      DEFI_LLAMA_INTERVAL: 1800
+      COINGECKO_INTERVAL: 600
+      BINANCE_INTERVAL: 60
+      # API keys
+      REDDIT_CLIENT_ID: ${REDDIT_CLIENT_ID:-}
+      REDDIT_CLIENT_SECRET: ${REDDIT_CLIENT_SECRET:-}
+      CRYPTOPANIC_API_KEY: ${CRYPTOPANIC_API_KEY:-}
+      COINGECKO_API_KEY: ${COINGECKO_API_KEY:-}
+    volumes:
+      - ./app:/app
+      - ./narrative_flow:/narrative_flow
+      - ./logs:/logs
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - narrativeflow-network
+    command: python -m narrative_flow.scheduler
+
+  # AI Analysis service
+  ai_analyzer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: narrativeflow-ai
+    environment:
+      DATABASE_URL: postgresql://narrativeflow:narrativeflow123@timescaledb:5432/narrativeflow
+      REDIS_URL: redis://redis:6379
+      PYTHONUNBUFFERED: 1
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes:
+      - ./app:/app
+      - ./logs:/logs
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - narrativeflow-network
+    command: python -m app.services.ai_analyzer
+
+  # Telegram bot service
+  telegram_bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: narrativeflow-telegram
+    environment:
+      DATABASE_URL: postgresql://narrativeflow:narrativeflow123@timescaledb:5432/narrativeflow
+      REDIS_URL: redis://redis:6379
+      PYTHONUNBUFFERED: 1
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    volumes:
+      - ./narrative_flow:/app/narrative_flow
+      - ./logs:/logs
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+    networks:
+      - narrativeflow-network
+    command: python -m narrative_flow.telegram.main
+
+  # Next.js frontend dashboard
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: narrativeflow-frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://api:8000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - api
+    networks:
+      - narrativeflow-network
+    command: npm run dev
+
+  # Grafana for monitoring (optional)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: narrativeflow-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: narrativeflow
+      GF_INSTALL_PLUGINS: grafana-piechart-panel
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - timescaledb
+    networks:
+      - narrativeflow-network
+    profiles:
+      - monitoring
 
 networks:
-  narrative-net:
+  narrativeflow-network:
     driver: bridge
+
+volumes:
+  timescale_data:
+  redis_data:
+  grafana_data:

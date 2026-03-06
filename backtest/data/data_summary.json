@@ -1,0 +1,23 @@
+{
+  "total_records": 9792,
+  "date_range": "2024-01-15 00:00:00 to 2025-02-25 23:00:00",
+  "narratives": [
+    "AI",
+    "Memecoins",
+    "Market_Neutral",
+    "RWA",
+    "DePIN",
+    "L2",
+    "Gaming"
+  ],
+  "divergence_signals": {
+    "early_entry": 974,
+    "accumulation": 516,
+    "late_exit": 1329
+  },
+  "signal_strength": {
+    "avg_strength": 0.43458237189387083,
+    "max_strength": 0.7770818435741508,
+    "signals_above_0.6": 1742
+  }
+}

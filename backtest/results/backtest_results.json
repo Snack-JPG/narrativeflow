@@ -1,0 +1,71 @@
+{
+  "total_trades": 10,
+  "winning_trades": 10,
+  "losing_trades": 0,
+  "win_rate": 1.0,
+  "total_return_pct": 62.889462677744156,
+  "avg_return_per_trade": 50.0,
+  "best_trade_return": 50.0,
+  "worst_trade_return": 50.0,
+  "sharpe_ratio": 0,
+  "max_drawdown_pct": 0.0,
+  "avg_time_to_peak_hours": 238.2,
+  "avg_holding_period_hours": 161.2,
+  "performance_by_signal": {
+    "early_entry": {
+      "trades": 9,
+      "win_rate": 1.0,
+      "avg_return": 50.0,
+      "total_return": 450.0
+    },
+    "accumulation": {
+      "trades": 1,
+      "win_rate": 1.0,
+      "avg_return": 50.0,
+      "total_return": 50.0
+    }
+  },
+  "performance_by_narrative": {
+    "Gaming": {
+      "trades": 1,
+      "win_rate": 1.0,
+      "avg_return": 50.0,
+      "total_return": 50.0
+    },
+    "DePIN": {
+      "trades": 2,
+      "win_rate": 1.0,
+      "avg_return": 50.0,
+      "total_return": 100.0
+    },
+    "RWA": {
+      "trades": 2,
+      "win_rate": 1.0,
+      "avg_return": 50.0,
+      "total_return": 100.0
+    },
+    "L2": {
+      "trades": 1,
+      "win_rate": 1.0,
+      "avg_return": 50.0,
+      "total_return": 50.0
+    },
+    "AI": {
+      "trades": 3,
+      "win_rate": 1.0,
+      "avg_return": 50.0,
+      "total_return": 150.0
+    },
+    "Memecoins": {
+      "trades": 1,
+      "win_rate": 1.0,
+      "avg_return": 50.0,
+      "total_return": 50.0
+    }
+  },
+  "false_positive_rate": 0.0,
+  "avg_capital_deployed": 12577.892535548828,
+  "capital_turnover": 1.257789253554883,
+  "value_at_risk_95": 50.0,
+  "conditional_value_at_risk": 50.0
+}
