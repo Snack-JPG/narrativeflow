@@ -356,6 +356,4 @@ Questions? Reach out:
 
 ---
 
-**Remember:** The best time to enter a narrative is when social buzz is building but price hasn't moved yet. NarrativeFlow finds those moments.
-
-*Not financial advice. DYOR. Markets are risky.*
+*Not financial advice. For educational and research purposes only.*
