@@ -8,7 +8,7 @@ from dataclasses import dataclass
 import asyncio
 
 from .claude_client import ClaudeClient
-from ..models.database import NarrativeClassification, SentimentAnalysis, OnChainData, PriceData
+from ..models.database import NarrativeMetrics, MarketData, OnChainData, DivergenceHistory
 
 logger = logging.getLogger(__name__)
 

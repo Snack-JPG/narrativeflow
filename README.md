@@ -1,6 +1,6 @@
 # NarrativeFlow - Crypto Narrative Rotation Tracker
 
-**Phase 1: Data Collection Layer**
+**Phases 1-6 Complete: Data Collection, Classification, Divergence Detection, AI Analysis, Dashboard & Telegram Bot**
 
 NarrativeFlow is a tool that detects which crypto narratives are gaining momentum BEFORE prices move, by cross-referencing social sentiment with on-chain data.
 
@@ -219,6 +219,59 @@ The SQLite database stores:
 - **data_sources** - Source configuration and status
 - **narrative_metrics** - Aggregated metrics per narrative (Phase 2)
 
+## Telegram Bot
+
+The NarrativeFlow Telegram bot provides real-time alerts and on-demand market intelligence directly to your Telegram.
+
+### Features
+
+- 🚨 **Real-time Alerts**
+  - Divergence signals (early entry, exit, accumulation)
+  - Narrative lifecycle transitions
+  - Major momentum shifts
+  - Rate limiting to prevent spam
+
+- 📱 **Bot Commands**
+  - `/narrative <name>` - Get detailed status of a specific narrative
+  - `/divergence` - Show current divergence signals
+  - `/briefing` - Get AI-generated market briefing
+  - `/top` - Show top narratives by momentum
+  - `/lifecycle` - View all narratives by lifecycle stage
+
+- ⏰ **Daily Briefings**
+  - Automated morning market analysis
+  - AI-powered insights on narrative rotations
+  - Key signals and opportunities
+
+### Setup
+
+1. **Create a Telegram Bot**
+   - Message @BotFather on Telegram
+   - Use `/newbot` command
+   - Save the bot token
+
+2. **Get Your Chat ID**
+   - Message @userinfobot on Telegram
+   - Save your chat ID
+
+3. **Configure Environment**
+   ```bash
+   # Add to .env file
+   TELEGRAM_BOT_TOKEN=your_bot_token_here
+   TELEGRAM_CHAT_ID=your_chat_id_here
+   ```
+
+4. **Start the Bot**
+   ```bash
+   python -m narrative_flow.telegram.main
+   ```
+
+### Alert Types
+
+- **Info** ℹ️ - General market updates
+- **Warning** ⚠️ - Important signals requiring attention
+- **Critical** 🚨 - High-confidence opportunities or risks
+
 ## Project Structure
 
 ```
@@ -237,6 +290,11 @@ narrative-flow/
 │   │   └── db_manager.py
 │   ├── api/            # FastAPI endpoints
 │   │   └── main.py
+│   ├── telegram/       # Telegram bot
+│   │   ├── bot.py      # Bot implementation
+│   │   ├── alerts.py   # Alert management
+│   │   ├── websocket_integration.py
+│   │   └── main.py     # Bot runner
 │   ├── config/         # Configuration
 │   │   └── settings.py
 │   └── scheduler.py    # Data collection scheduler
@@ -266,11 +324,17 @@ narrative-flow/
 - Catalyst identification
 - Natural language market analysis
 
-**Phase 5: Frontend Dashboard**
+**Phase 5: Frontend Dashboard** ✅
 - Next.js dashboard
 - Real-time narrative heatmap
 - Divergence alerts
 - Historical rotation charts
+
+**Phase 6: Telegram Bot + Alerts** ✅
+- Real-time alerts via Telegram
+- Bot commands for narrative queries
+- Rate-limited notifications
+- Daily AI-generated briefings
 
 ## License
 

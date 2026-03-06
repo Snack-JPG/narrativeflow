@@ -32,6 +32,10 @@ tenacity==9.0.0  # Retry logic
 # AI/NLP for Phase 2
 anthropic==0.39.0  # Claude API for classification
 
+# Telegram Bot
+python-telegram-bot==21.7  # Python port of grammY concepts
+redis==5.2.1  # For rate limiting
+
 # Development
 pytest==8.3.4
 pytest-asyncio==0.25.0

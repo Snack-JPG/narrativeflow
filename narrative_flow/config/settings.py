@@ -83,6 +83,19 @@ class Settings(BaseSettings):
         description="Mapping from CoinGecko categories to our narratives"
     )
 
+    # Telegram Bot Configuration
+    telegram_bot_token: str = Field(default="", description="Telegram bot token from @BotFather")
+    telegram_chat_id: str = Field(default="", description="Telegram chat ID for alerts")
+    telegram_daily_briefing_hour: int = Field(default=9, description="Hour for daily briefing (24-hour format)")
+    telegram_daily_briefing_minute: int = Field(default=0, description="Minute for daily briefing")
+
+    # Alert Settings
+    alert_max_per_narrative_per_hour: int = Field(default=1, description="Max alerts per narrative per hour")
+    alert_critical_bypass_limit: bool = Field(default=True, description="Critical alerts bypass rate limiting")
+
+    # Redis Configuration (for rate limiting)
+    redis_url: str = Field(default="redis://localhost:6379/0", description="Redis connection URL")
+
     class Config:
         env_file = ".env"
         case_sensitive = False
