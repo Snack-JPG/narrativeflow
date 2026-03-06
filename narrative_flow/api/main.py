@@ -13,6 +13,7 @@ from ..models import get_db, RawData, MarketData, OnChainData, NarrativeMetrics,
 from ..config import settings
 from ..engine import NarrativeProcessor, DivergenceDetector, DivergenceTracker, DivergenceSignal
 from .websocket import websocket_endpoint, start_monitor, stop_monitor
+from .briefing_routes import router as briefing_router
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
