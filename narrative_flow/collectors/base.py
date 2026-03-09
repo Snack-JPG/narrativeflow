@@ -182,7 +182,7 @@ class BaseCollector(ABC):
                     narrative_tags=narratives,
                     sentiment=sentiment,
                     sentiment_score=sentiment_score,
-                    metadata=item.get("metadata", {})
+                    source_metadata=item.get("metadata", {})
                 )
                 session.add(raw_data)
                 stored_count += 1

@@ -147,8 +147,8 @@ class AlertManager:
             key_pattern = "alert_history:*"
 
             # Scan for alert history keys
-            cursor = "0"
-            while cursor != 0:
+            cursor = 0
+            while True:
                 cursor, keys = await self.redis_client.scan(
                     cursor=cursor,
                     match=key_pattern,
@@ -169,6 +169,9 @@ class AlertManager:
                                 timestamp=timestamp,
                                 data=alert_dict.get("data")
                             ))
+
+                if int(cursor) == 0:
+                    break
 
             # Sort by timestamp
             alerts.sort(key=lambda x: x.timestamp, reverse=True)

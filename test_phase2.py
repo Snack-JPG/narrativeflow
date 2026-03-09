@@ -310,14 +310,14 @@ async def test_ai_classification():
             title='Agentic wallets enable autonomous DeFi trading',
             content='New smart wallets can execute trades based on AI decisions',
             timestamp=datetime.now(),
-            metadata={}
+            source_metadata={}
         ),
         ClassificationRequest(
             id='2',
             title='Mysterious whale accumulates ONDO tokens',
             content='Large wallet quietly building position in RWA protocol',
             timestamp=datetime.now(),
-            metadata={}
+            source_metadata={}
         )
     ]
 

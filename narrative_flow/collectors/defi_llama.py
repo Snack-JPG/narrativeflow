@@ -221,7 +221,7 @@ class DeFiLlamaCollector(BaseCollector):
                     tvl_change_24h=item.get("tvl_change_24h"),
                     narrative_category=item.get("narrative_category"),
                     source="DeFiLlama",
-                    metadata=item.get("metadata", {})
+                    source_metadata=item.get("metadata", {})
                 )
                 session.add(onchain_data)
                 stored_count += 1

@@ -3,7 +3,6 @@
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy.orm import sessionmaker
 from .database import Base
 from ..config import settings
 
@@ -58,5 +57,12 @@ db_manager = DatabaseManager()
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """Dependency for FastAPI to get database session."""
+    async with db_manager.get_session() as session:
+        yield session
+
+
+@asynccontextmanager
+async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
+    """Context manager helper for non-FastAPI call sites."""
     async with db_manager.get_session() as session:
         yield session

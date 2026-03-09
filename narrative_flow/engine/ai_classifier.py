@@ -300,7 +300,7 @@ class HybridClassifier:
                     title=title,
                     content=content,
                     timestamp=datetime.now(),
-                    metadata=metadata or {}
+                    source_metadata=metadata or {}
                 )
 
                 await self.ai_classifier.add_item(request)

@@ -26,9 +26,12 @@ export default function Dashboard() {
       min_confidence: 0.7,
       message_types: ['divergence_alert', 'lifecycle_change', 'whale_move', 'catalyst_event']
     });
+    wsClient.requestCurrent();
+    const refreshCurrent = setInterval(() => wsClient.requestCurrent(), 30000);
 
     // Cleanup
     return () => {
+      clearInterval(refreshCurrent);
       cleanupConnected();
       wsClient.disconnect();
     };

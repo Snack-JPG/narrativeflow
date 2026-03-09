@@ -8,6 +8,7 @@ pydantic-settings==2.6.1
 # Database
 sqlalchemy==2.0.36
 aiosqlite==0.20.0
+asyncpg==0.30.0
 
 # Data Collection
 httpx==0.28.0

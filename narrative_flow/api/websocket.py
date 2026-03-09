@@ -9,7 +9,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..engine import DivergenceDetector, DivergenceTracker, DivergenceSignal
-from ..models import get_db
+from ..models import get_db_session
 from ..config import settings
 
 logger = logging.getLogger(__name__)
@@ -255,7 +255,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
             elif message.get("type") == "request_current":
                 # Send current top divergences
-                async with get_db() as db:
+                async with get_db_session() as db:
                     detector = DivergenceDetector(db)
                     signals = await detector.get_top_divergences(
                         min_confidence=0.5,

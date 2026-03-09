@@ -236,7 +236,7 @@ class CoinGeckoCollector(BaseCollector):
                         price_change_24h=item.get("price_change_24h"),
                         narrative_category=item.get("narrative_category"),
                         source="CoinGecko",
-                        metadata=item.get("metadata", {})
+                        source_metadata=item.get("metadata", {})
                     )
                     session.add(market_data)
                     stored_count += 1

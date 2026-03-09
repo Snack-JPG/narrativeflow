@@ -8,7 +8,7 @@ services:
     environment:
       POSTGRES_DB: narrativeflow
       POSTGRES_USER: narrativeflow
-      POSTGRES_PASSWORD: narrativeflow123
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-narrativeflow_local}
     ports:
       - "5432:5432"
     volumes:
@@ -45,7 +45,7 @@ services:
       dockerfile: Dockerfile
     container_name: narrativeflow-api
     environment:
-      DATABASE_URL: postgresql://narrativeflow:narrativeflow123@timescaledb:5432/narrativeflow
+      DATABASE_URL: postgresql+asyncpg://narrativeflow:${POSTGRES_PASSWORD:-narrativeflow_local}@timescaledb:5432/narrativeflow
       REDIS_URL: redis://redis:6379
       PYTHONUNBUFFERED: 1
       # Add your API keys here or use .env file
@@ -60,9 +60,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./app:/app
-      - ./backtest:/backtest
-      - ./narrative_flow/data:/data
+      - ./:/app
       - ./logs:/logs
     depends_on:
       timescaledb:
@@ -80,7 +78,7 @@ services:
       dockerfile: Dockerfile
     container_name: narrativeflow-collector
     environment:
-      DATABASE_URL: postgresql://narrativeflow:narrativeflow123@timescaledb:5432/narrativeflow
+      DATABASE_URL: postgresql+asyncpg://narrativeflow:${POSTGRES_PASSWORD:-narrativeflow_local}@timescaledb:5432/narrativeflow
       REDIS_URL: redis://redis:6379
       PYTHONUNBUFFERED: 1
       # Collection intervals (seconds)
@@ -96,8 +94,7 @@ services:
       CRYPTOPANIC_API_KEY: ${CRYPTOPANIC_API_KEY:-}
       COINGECKO_API_KEY: ${COINGECKO_API_KEY:-}
     volumes:
-      - ./app:/app
-      - ./narrative_flow:/narrative_flow
+      - ./:/app
       - ./logs:/logs
     depends_on:
       timescaledb:
@@ -115,13 +112,13 @@ services:
       dockerfile: Dockerfile
     container_name: narrativeflow-ai
     environment:
-      DATABASE_URL: postgresql://narrativeflow:narrativeflow123@timescaledb:5432/narrativeflow
+      DATABASE_URL: postgresql+asyncpg://narrativeflow:${POSTGRES_PASSWORD:-narrativeflow_local}@timescaledb:5432/narrativeflow
       REDIS_URL: redis://redis:6379
       PYTHONUNBUFFERED: 1
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     volumes:
-      - ./app:/app
+      - ./:/app
       - ./logs:/logs
     depends_on:
       timescaledb:
@@ -139,13 +136,13 @@ services:
       dockerfile: Dockerfile
     container_name: narrativeflow-telegram
     environment:
-      DATABASE_URL: postgresql://narrativeflow:narrativeflow123@timescaledb:5432/narrativeflow
+      DATABASE_URL: postgresql+asyncpg://narrativeflow:${POSTGRES_PASSWORD:-narrativeflow_local}@timescaledb:5432/narrativeflow
       REDIS_URL: redis://redis:6379
       PYTHONUNBUFFERED: 1
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
     volumes:
-      - ./narrative_flow:/app/narrative_flow
+      - ./:/app
       - ./logs:/logs
     depends_on:
       timescaledb:
@@ -184,7 +181,7 @@ services:
     container_name: narrativeflow-grafana
     environment:
       GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: narrativeflow
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-narrativeflow_local}
       GF_INSTALL_PLUGINS: grafana-piechart-panel
     ports:
       - "3001:3000"

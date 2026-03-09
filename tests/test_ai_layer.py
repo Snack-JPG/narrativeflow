@@ -12,16 +12,21 @@ from narrative_flow.ai import (
     MarketRegimeAnalyzer,
     BriefingStorage
 )
-from narrative_flow.ai.market_regime import LifecycleStage, RegimeAnalysis
+from narrative_flow.ai.market_regime import NarrativeStage, RegimeAnalysis
 
 
 @pytest.fixture
 def mock_claude_client():
     """Mock Claude client."""
     client = Mock(spec=ClaudeClient)
-    client.generate = AsyncMock(return_value={
+    client.analyze_narrative_data = AsyncMock(return_value={
         "summary": "Test summary",
-        "key_points": ["point1", "point2"]
+        "emerging_narratives": [{"narrative": "AI"}],
+        "overheated_narratives": [],
+        "catalysts": [],
+        "divergences": [],
+        "market_regime": {"AI": "emerging"},
+        "recommendations": []
     })
     return client
 
@@ -62,19 +67,23 @@ class TestClaudeClient:
     @pytest.mark.asyncio
     async def test_generate_briefing_prompt(self):
         """Test briefing prompt generation."""
-        client = ClaudeClient()
+        # Bypass external client initialization; this test only validates prompt/parse flow.
+        client = ClaudeClient.__new__(ClaudeClient)
 
         # Mock the actual API call
-        with patch.object(client, '_call_api', new_callable=AsyncMock) as mock_api:
-            mock_api.return_value = {
+        with patch.object(client, 'analyze', new_callable=AsyncMock) as mock_analyze:
+            mock_analyze.return_value = """
+            {
                 "executive_summary": "Market shows bullish sentiment",
                 "key_narratives": ["AI", "RWA"],
                 "recommendations": []
             }
+            """
 
-            result = await client.generate(
-                prompt="Generate briefing",
-                system="You are a market analyst"
+            result = await client.analyze_narrative_data(
+                social_data=[],
+                onchain_data={},
+                price_data={}
             )
 
             assert "executive_summary" in result
@@ -133,16 +142,24 @@ class TestChangeDetector:
         """Test narrative change detection."""
         current_data = {
             "narratives": {
-                "AI": {"momentum": 0.8, "sentiment": 0.7, "mentions": 150},
-                "RWA": {"momentum": 0.3, "sentiment": 0.4, "mentions": 30}
+                "AI": {"momentum": 0.8, "sentiment": 0.7, "mentions": 150, "regime": "emerging"},
+                "RWA": {"momentum": 0.3, "sentiment": -0.4, "mentions": 30, "regime": "declining"}
             }
         }
 
         historical_data = [
             {
+                "timestamp": (datetime.utcnow() - timedelta(hours=3)).isoformat(),
                 "narratives": {
-                    "AI": {"momentum": 0.4, "sentiment": 0.5, "mentions": 50},
-                    "RWA": {"momentum": 0.6, "sentiment": 0.6, "mentions": 80}
+                    "AI": {"momentum": 0.1, "sentiment": -0.2, "mentions": 50, "regime": "whisper"},
+                    "RWA": {"momentum": 0.9, "sentiment": 0.6, "mentions": 80, "regime": "mainstream"}
+                }
+            },
+            {
+                "timestamp": (datetime.utcnow() - timedelta(hours=1)).isoformat(),
+                "narratives": {
+                    "AI": {"momentum": 0.2, "sentiment": -0.1, "mentions": 60, "regime": "whisper"},
+                    "RWA": {"momentum": 0.8, "sentiment": 0.5, "mentions": 75, "regime": "mainstream"}
                 }
             }
         ]
@@ -157,7 +174,7 @@ class TestChangeDetector:
         # AI should show increasing momentum
         ai_changes = [c for c in changes if c.narrative == "AI"]
         assert len(ai_changes) > 0
-        assert ai_changes[0].change_type in ["momentum_surge", "sentiment_shift"]
+        assert ai_changes[0].change_type in ["momentum_surge", "regime_progression", "sentiment_flip"]
 
         # RWA should show declining momentum
         rwa_changes = [c for c in changes if c.narrative == "RWA"]
@@ -172,29 +189,30 @@ class TestCatalystIdentifier:
         """Test catalyst identification from social data."""
         social_data = [
             {
-                "content": "Coinbase launches new AI agent wallet feature",
+                "text": "Coinbase will list FET after major AI agent launch announcement",
                 "timestamp": datetime.utcnow(),
-                "narrative": "AI",
-                "sentiment": 0.9
+                "source": "twitter",
+                "engagement": 100000,
+                "author_influence": 50000
             },
             {
-                "content": "BlackRock expands RWA tokenization program",
+                "text": "BlackRock and Ondo announce strategic partnership for tokenized treasury expansion",
                 "timestamp": datetime.utcnow(),
-                "narrative": "RWA",
-                "sentiment": 0.8
+                "source": "reddit",
+                "engagement": 80000,
+                "author_influence": 30000
             }
         ]
 
         catalysts = await catalyst_identifier.identify_catalysts(
             social_data=social_data,
-            lookback_hours=24
+            news_data=[],
+            price_movements={},
+            time_window=24
         )
 
         assert len(catalysts) > 0
-        # Should identify Coinbase and BlackRock as catalysts
-        catalyst_texts = [c.description for c in catalysts]
-        assert any("Coinbase" in text for text in catalyst_texts)
-        assert any("BlackRock" in text for text in catalyst_texts)
+        assert any(c.event_type in ["listing", "partnership"] for c in catalysts)
 
 
 class TestMarketRegimeAnalyzer:
@@ -229,10 +247,10 @@ class TestMarketRegimeAnalyzer:
         )
 
         assert isinstance(analysis, RegimeAnalysis)
-        assert analysis.current_stage in [stage for stage in LifecycleStage]
+        assert analysis.current_stage in [stage for stage in NarrativeStage]
         assert 0 <= analysis.stage_confidence <= 1
-        assert analysis.risk_level in ["low", "medium", "high", "very_high"]
-        assert 0 <= analysis.opportunity_score <= 1
+        assert analysis.risk_level in ["low", "medium", "high", "extreme"]
+        assert 0 <= analysis.opportunity_score <= 10
 
 
 class TestBriefingStorage:

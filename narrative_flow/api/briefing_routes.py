@@ -2,9 +2,10 @@
 
 from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
 from typing import Dict, List, Any, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel, Field
 import logging
+from sqlalchemy import select, desc
 
 from ..ai import (
     ClaudeClient,
@@ -14,8 +15,8 @@ from ..ai import (
     MarketRegimeAnalyzer,
     BriefingStorage
 )
-from ..models.database import get_db_session
-from ..engine.divergence import DivergenceDetector
+from ..models import RawData, MarketData, OnChainData, DivergenceHistory, DataSource
+from ..models.db_manager import get_db_session
 
 logger = logging.getLogger(__name__)
 
@@ -55,12 +56,32 @@ class BriefingHistoryResponse(BaseModel):
 
 # Initialize components
 storage = BriefingStorage()
-claude = ClaudeClient()
-briefing_gen = BriefingGenerator(claude)
+claude: Optional[ClaudeClient] = None
+briefing_gen: Optional[BriefingGenerator] = None
 change_detector = ChangeDetector()
 catalyst_identifier = CatalystIdentifier()
 regime_analyzer = MarketRegimeAnalyzer()
-divergence_detector = DivergenceDetector()
+
+
+def _get_briefing_generator() -> BriefingGenerator:
+    """Lazily initialize Claude-backed briefing generator."""
+    global claude, briefing_gen
+
+    if briefing_gen is not None:
+        return briefing_gen
+
+    try:
+        claude = ClaudeClient()
+        briefing_gen = BriefingGenerator(claude)
+        return briefing_gen
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "AI briefing unavailable: ANTHROPIC_API_KEY is not configured. "
+                "Set the environment variable and retry."
+            )
+        ) from exc
 
 
 @router.on_event("startup")
@@ -174,7 +195,8 @@ async def generate_briefing(
             previous_briefing = await storage.get_latest_briefing()
 
         # Generate briefing
-        briefing = await briefing_gen.generate_briefing(
+        generator = _get_briefing_generator()
+        briefing = await generator.generate_briefing(
             social_data=social_data,
             onchain_data=onchain_data,
             price_data=price_data,
@@ -357,20 +379,151 @@ async def get_briefing_stats():
 # Helper functions
 async def _get_social_data(session, time_window: int) -> List[Dict[str, Any]]:
     """Get social data from database."""
-    # Simplified - would query actual database
-    return []
+    since = datetime.utcnow() - timedelta(hours=time_window)
+    query = (
+        select(RawData, DataSource.name)
+        .join(DataSource, RawData.source_id == DataSource.id)
+        .where(RawData.timestamp >= since)
+        .order_by(desc(RawData.timestamp))
+        .limit(500)
+    )
+    result = await session.execute(query)
+
+    social_data: List[Dict[str, Any]] = []
+    for raw_item, source_name in result.all():
+        source_metadata = raw_item.source_metadata or {}
+        narratives = raw_item.narrative_tags or []
+        if isinstance(narratives, str):
+            narratives = [narratives]
+
+        author_influence = (
+            source_metadata.get("author_followers")
+            or source_metadata.get("followers")
+            or source_metadata.get("author_karma")
+            or 0
+        )
+        engagement = (
+            source_metadata.get("engagement")
+            or source_metadata.get("interactions")
+            or source_metadata.get("upvotes")
+            or source_metadata.get("score")
+            or 0
+        )
+
+        text_content = " ".join(
+            part for part in [raw_item.title, raw_item.content] if part
+        ).strip()
+
+        social_data.append({
+            "id": raw_item.id,
+            "timestamp": raw_item.timestamp.isoformat(),
+            "title": raw_item.title,
+            "content": raw_item.content,
+            "text": text_content,
+            "url": raw_item.url,
+            "author": raw_item.author,
+            "source": source_name,
+            "narratives": narratives,
+            "sentiment": {
+                "label": raw_item.sentiment or "neutral",
+                "score": raw_item.sentiment_score if raw_item.sentiment_score is not None else 0.0,
+            },
+            "author_influence": float(author_influence) if isinstance(author_influence, (int, float)) else 0.0,
+            "engagement": float(engagement) if isinstance(engagement, (int, float)) else 0.0,
+            "metadata": source_metadata,
+        })
+
+    return social_data
 
 
 async def _get_onchain_data(session, time_window: int) -> Dict[str, Any]:
     """Get on-chain data from database."""
-    # Simplified - would query actual database
-    return {}
+    since = datetime.utcnow() - timedelta(hours=time_window)
+    query = (
+        select(OnChainData)
+        .where(OnChainData.timestamp >= since)
+        .order_by(desc(OnChainData.timestamp))
+    )
+    result = await session.execute(query)
+    rows = result.scalars().all()
+
+    onchain_data: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        narrative = row.narrative_category or "Uncategorized"
+        if narrative not in onchain_data:
+            onchain_data[narrative] = {
+                "tvl": 0.0,
+                "tvl_change": 0.0,
+                "active_protocols": set(),
+                "chains": set(),
+                "_tvl_change_count": 0,
+            }
+
+        bucket = onchain_data[narrative]
+        bucket["tvl"] += float(row.tvl or 0.0)
+        if row.tvl_change_24h is not None:
+            bucket["tvl_change"] += float(row.tvl_change_24h)
+            bucket["_tvl_change_count"] += 1
+        if row.protocol:
+            bucket["active_protocols"].add(row.protocol)
+        if row.chain:
+            bucket["chains"].add(row.chain)
+
+    for narrative, bucket in onchain_data.items():
+        count = bucket.pop("_tvl_change_count")
+        bucket["tvl_change"] = (bucket["tvl_change"] / count) if count else 0.0
+        bucket["active_protocols"] = len(bucket["active_protocols"])
+        bucket["chains"] = sorted(bucket["chains"])
+
+    return onchain_data
 
 
 async def _get_price_data(session, time_window: int) -> Dict[str, Any]:
     """Get price data from database."""
-    # Simplified - would query actual database
-    return {}
+    since = datetime.utcnow() - timedelta(hours=time_window)
+    query = (
+        select(MarketData)
+        .where(MarketData.timestamp >= since)
+        .order_by(desc(MarketData.timestamp))
+    )
+    result = await session.execute(query)
+    rows = result.scalars().all()
+
+    price_data: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        narrative = row.narrative_category or "Uncategorized"
+        if narrative not in price_data:
+            price_data[narrative] = {
+                "price": None,
+                "change_24h": 0.0,
+                "total_volume_24h": 0.0,
+                "total_market_cap": 0.0,
+                "symbols": set(),
+                "_price_change_count": 0,
+            }
+
+        bucket = price_data[narrative]
+
+        # Keep the most recent non-null price as representative snapshot.
+        if bucket["price"] is None and row.price is not None:
+            bucket["price"] = float(row.price)
+
+        if row.price_change_24h is not None:
+            bucket["change_24h"] += float(row.price_change_24h)
+            bucket["_price_change_count"] += 1
+
+        bucket["total_volume_24h"] += float(row.volume_24h or 0.0)
+        bucket["total_market_cap"] += float(row.market_cap or 0.0)
+        if row.symbol:
+            bucket["symbols"].add(row.symbol)
+
+    for narrative, bucket in price_data.items():
+        count = bucket.pop("_price_change_count")
+        bucket["change_24h"] = (bucket["change_24h"] / count) if count else 0.0
+        bucket["price"] = bucket["price"] if bucket["price"] is not None else 0.0
+        bucket["symbols"] = sorted(bucket["symbols"])
+
+    return price_data
 
 
 async def _get_divergences(
@@ -380,9 +533,52 @@ async def _get_divergences(
     price_data: Dict[str, Any]
 ) -> List[Dict[str, Any]]:
     """Detect divergence signals."""
-    # Use divergence detector
-    signals = []
-    # Simplified - would use actual divergence detector
+    # Derive a lookback window from gathered social data; fallback to 24h.
+    since = datetime.utcnow() - timedelta(hours=24)
+    timestamps = [
+        item.get("timestamp") for item in social_data
+        if item.get("timestamp")
+    ]
+    if timestamps:
+        parsed_times = []
+        for timestamp in timestamps:
+            try:
+                parsed = datetime.fromisoformat(str(timestamp).replace("Z", "+00:00"))
+                if parsed.tzinfo is not None:
+                    parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+                parsed_times.append(parsed)
+            except (TypeError, ValueError):
+                continue
+        if parsed_times:
+            since = min(parsed_times)
+
+    query = (
+        select(DivergenceHistory)
+        .where(DivergenceHistory.timestamp >= since)
+        .order_by(desc(DivergenceHistory.timestamp))
+        .limit(50)
+    )
+    result = await session.execute(query)
+    rows = result.scalars().all()
+
+    signals: List[Dict[str, Any]] = []
+    for row in rows:
+        signals.append({
+            "narrative": row.narrative,
+            "signal": row.divergence_signal,
+            "signal_type": row.divergence_signal,
+            "lifecycle": row.lifecycle_stage,
+            "confidence": float(row.confidence or 0.0),
+            "strength": float(row.divergence_score or row.momentum_score or 0.0),
+            "momentum_score": float(row.momentum_score or 0.0),
+            "divergence_score": float(row.divergence_score or 0.0),
+            "social_velocity": float(row.social_velocity or 0.0),
+            "tvl": float(row.tvl or 0.0),
+            "price": float(row.price or 0.0),
+            "price_change_24h": float(row.price_change_24h or 0.0),
+            "timestamp": row.timestamp.isoformat(),
+        })
+
     return signals
 
 

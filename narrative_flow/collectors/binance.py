@@ -266,7 +266,7 @@ class BinanceCollector(BaseCollector):
                         price_change_24h=item.get("price_change_24h"),
                         narrative_category=item.get("narrative_category"),
                         source="Binance",
-                        metadata=item.get("metadata", {})
+                        source_metadata=item.get("metadata", {})
                     )
                     session.add(market_data)
                     stored_count += 1
@@ -281,7 +281,7 @@ class BinanceCollector(BaseCollector):
                         open_interest=item.get("open_interest"),
                         narrative_category=item.get("narrative_category"),
                         source="Binance_Futures",
-                        metadata=item.get("metadata", {})
+                        source_metadata=item.get("metadata", {})
                     )
                     session.add(market_data)
                     stored_count += 1

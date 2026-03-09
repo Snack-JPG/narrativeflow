@@ -182,9 +182,37 @@ class DataCollectionScheduler:
 
     def stop(self):
         """Stop the scheduler."""
-        self.scheduler.shutdown()
-        logger.info("Scheduler stopped")
+        if self.scheduler.running:
+            self.scheduler.shutdown()
+            logger.info("Scheduler stopped")
 
 
 # Global scheduler instance
 scheduler = DataCollectionScheduler()
+
+
+async def run_scheduler_service():
+    """Run scheduler as a standalone long-lived service."""
+    logger.info("Starting scheduler service...")
+    await db_manager.create_all()
+
+    try:
+        await scheduler.run_initial_collection()
+        scheduler.start()
+
+        while True:
+            await asyncio.sleep(3600)
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        logger.info("Scheduler service stopping...")
+    finally:
+        scheduler.stop()
+        await db_manager.close()
+
+
+def main():
+    """CLI entrypoint for scheduler service."""
+    asyncio.run(run_scheduler_service())
+
+
+if __name__ == "__main__":
+    main()

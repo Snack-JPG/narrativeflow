@@ -4,7 +4,7 @@ from .database import (
     Base, DataSource, RawData, MarketData, OnChainData,
     NarrativeMetrics, EnrichedData, VelocitySnapshot, DivergenceHistory
 )
-from .db_manager import DatabaseManager, get_db
+from .db_manager import DatabaseManager, get_db, get_db_session
 
 __all__ = [
     "Base",
@@ -17,5 +17,6 @@ __all__ = [
     "VelocitySnapshot",
     "DivergenceHistory",
     "DatabaseManager",
-    "get_db"
+    "get_db",
+    "get_db_session",
 ]
